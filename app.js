@@ -7,7 +7,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
 const fileInput = document.getElementById('file-input');
 const statusDiv = document.getElementById('status');
 const downloadLink = document.getElementById('download-link');
-const progressText = document.getElementById('progress-text'); // New Percentage Tracker
+const progressText = document.getElementById('progress-text');
 
 // UI State Containers
 const uiDropzone = document.getElementById('ui-dropzone');
@@ -44,11 +44,11 @@ async function initFFmpeg() {
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
     
-    // Tap into FFmpeg's internal brain to track video rendering progress (Maps from 50% to 100%)
+    // Tap into FFmpeg's internal brain to track video rendering progress
     ffmpeg.on('progress', ({ progress }) => {
         if (progress >= 0 && progress <= 1) {
             const totalProgress = 50 + (progress * 50);
-            updateProgress(Math.min(totalProgress, 99)); // Cap at 99% until fully complete
+            updateProgress(Math.min(totalProgress, 99)); 
         }
     });
 
@@ -71,7 +71,7 @@ async function convertPdfToVideo() {
 
     try {
         switchUI('processing');
-        updateProgress(0); // Reset tracker
+        updateProgress(0);
         
         const ffmpegCore = await initFFmpeg();
         updateStatus("Reading PDF document streams...");
@@ -87,7 +87,6 @@ async function convertPdfToVideo() {
                 const mainCanvas = document.createElement('canvas');
                 const ctx = mainCanvas.getContext('2d');
                 
-                // Process pages and track progress from 0% to 50%
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     updateStatus(`Slicing and stamping page ${pageNum} of ${pdf.numPages}...`);
                     
@@ -118,14 +117,43 @@ async function convertPdfToVideo() {
                     const yOffset = (masterHeight - tempCanvas.height * scale) / 2;
                     ctx.drawImage(tempCanvas, xOffset, yOffset, tempCanvas.width * scale, tempCanvas.height * scale);
                     
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'; 
-                    ctx.font = `bold ${Math.round(masterHeight * 0.025)}px sans-serif`; 
-                    ctx.textAlign = 'right';
-                    ctx.textBaseline = 'bottom';
+                    // ---------------------------------------------------------
+                    // 3. Stamp High-Visibility Badge Watermark
+                    // ---------------------------------------------------------
+                    const pageText = `Page ${pageNum} of ${pdf.numPages}`;
+                    const fontSize = Math.max(16, Math.round(masterHeight * 0.025)); // Scale font dynamically
+                    ctx.font = `bold ${fontSize}px sans-serif`;
                     
-                    const paddingX = masterWidth * 0.04;
-                    const paddingY = masterHeight * 0.03;
-                    ctx.fillText(`Page ${pageNum} of ${pdf.numPages}`, masterWidth - paddingX, masterHeight - paddingY);
+                    // Measure text to dynamically size the black box
+                    const textWidth = ctx.measureText(pageText).width;
+                    
+                    // Spacing calculations
+                    const paddingX = masterWidth * 0.04; // Distance from right edge
+                    const paddingY = masterHeight * 0.03; // Distance from bottom edge
+                    const badgePaddingX = fontSize * 0.8; // Inner box width padding
+                    const badgePaddingY = fontSize * 0.5; // Inner box height padding
+                    
+                    const badgeWidth = textWidth + (badgePaddingX * 2);
+                    const badgeHeight = fontSize + (badgePaddingY * 2);
+                    const badgeX = masterWidth - paddingX - badgeWidth;
+                    const badgeY = masterHeight - paddingY - badgeHeight;
+
+                    // Draw semi-transparent black pill shape
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // 75% dark black
+                    if (ctx.roundRect) {
+                        ctx.beginPath();
+                        ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight); // Fallback
+                    }
+
+                    // Draw bright white text exactly in the center of the badge
+                    ctx.fillStyle = '#ffffff'; 
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(pageText, badgeX + (badgeWidth / 2), badgeY + (badgeHeight / 2) + 1);
+                    // ---------------------------------------------------------
                     
                     const dataUrl = mainCanvas.toDataURL('image/jpeg', 0.85);
                     const base64Data = dataUrl.split(',')[1];
@@ -135,7 +163,6 @@ async function convertPdfToVideo() {
                     
                     await ffmpegCore.writeFile(`frame_${padZero(pageNum)}.jpg`, imgBuffer);
                     
-                    // Update PDF Parsing Progress (0 to 50%)
                     const pdfProgress = (pageNum / pdf.numPages) * 50;
                     updateProgress(pdfProgress);
                 }
