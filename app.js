@@ -1,11 +1,11 @@
 // Ensure we use the correct namespace for FFmpeg v0.12+
-const { FFmpeg } = window.FFmpegWASM;
+const { FFmpeg } = window.FFmpegWASM || window;
 let ffmpeg = null;
 
 // Configure PDF.js Worker path using a reliable public CDN worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// DOM Element Selectors (Ensure these match your index.html element IDs)
+// DOM Element Selectors
 const fileInput = document.getElementById('file-input') || document.querySelector('input[type="file"]');
 const convertBtn = document.getElementById('convert-btn') || document.querySelector('button');
 const statusDiv = document.getElementById('status');
@@ -31,10 +31,18 @@ async function initFFmpeg() {
     
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
+
+    // Enable logging to see FFmpeg progress in the browser console
+    ffmpeg.on('log', ({ message }) => {
+        console.log(`[FFmpeg] ${message}`);
+    });
     
-    // Loads local asset bundle compiled to bypass strict cross-origin security rules
+    // Use unpkg CDN for reliable v0.12 core/wasm loading
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    
     await ffmpeg.load({
-        coreURL: 'ffmpeg.js'
+        coreURL: `${baseURL}/ffmpeg-core.js`,
+        wasmURL: `${baseURL}/ffmpeg-core.wasm`,
     });
     
     return ffmpeg;
@@ -42,12 +50,9 @@ async function initFFmpeg() {
 
 /**
  * Helper function to zero-pad image names for sequential FFmpeg ingestion
- * e.g., 1 -> "frame_001.jpg"
  */
 function padZero(num, size = 3) {
-    let s = num + "";
-    while (s.length < size) s = "0" + s;
-    return s;
+    return num.toString().padStart(size, '0');
 }
 
 /**
@@ -78,11 +83,11 @@ async function convertPdfToVideo() {
                 let masterWidth = 0;
                 let masterHeight = 0;
                 
-                // Create an offline dynamic template canvas for rendering and capturing frame arrays
+                // Create an offline dynamic template canvas for rendering
                 const mainCanvas = document.createElement('canvas');
                 const ctx = mainCanvas.getContext('2d');
                 
-                updateStatus("Slicing document frames and stamping markers...");
+                updateStatus(`Slicing ${pdf.numPages} document frames and stamping markers...`);
                 
                 // 2. Loop Through and Normalize Every PDF Page
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -122,7 +127,7 @@ async function convertPdfToVideo() {
                     
                     ctx.drawImage(tempCanvas, xOffset, yOffset, tempCanvas.width * scale, tempCanvas.height * scale);
                     
-                    // 3. Stamp Page Number Watermark (Bottom Right Corner)
+                    // 3. Stamp Page Number Watermark
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'; 
                     ctx.font = `bold ${Math.round(masterHeight * 0.025)}px sans-serif`; 
                     ctx.textAlign = 'right';
@@ -132,22 +137,17 @@ async function convertPdfToVideo() {
                     const paddingY = masterHeight * 0.03;
                     ctx.fillText(`Page ${pageNum} of ${pdf.numPages}`, masterWidth - paddingX, masterHeight - paddingY);
                     
-                    // 4. Compress to binary array data buffer and store into virtual memory file structure
+                    // 4. MUCH FASTER: Compress to binary array via native fetch rather than manual JS loop
                     const dataUrl = mainCanvas.toDataURL('image/jpeg', 0.85);
-                    const base64Data = dataUrl.split(',')[1];
-                    const binaryData = atob(base64Data);
-                    const imgBuffer = new Uint8Array(binaryData.length);
-                    
-                    for (let i = 0; i < binaryData.length; i++) {
-                        imgBuffer[i] = binaryData.charCodeAt(i);
-                    }
+                    const response = await fetch(dataUrl);
+                    const imgBuffer = new Uint8Array(await response.arrayBuffer());
                     
                     const filename = `frame_${padZero(pageNum)}.jpg`;
                     await ffmpegCore.writeFile(filename, imgBuffer);
                 }
                 
                 // 5. Invoke Multi-Threaded FFmpeg Command to Process Slideshow Output
-                updateStatus("Stitching MP4 stream elements... This might take a moment.");
+                updateStatus("Stitching MP4 stream elements... This might take a moment. Check console for progress.");
                 
                 await ffmpegCore.exec([
                     '-framerate', '1',               // Displays each slide frame for exactly 1 second
@@ -158,10 +158,10 @@ async function convertPdfToVideo() {
                     'output.mp4'                     // Output target naming structure
                 ]);
                 
-                // 6. Read Output Stream from Virtual File System and Deploy Local Asset Url
+                // 6. Read Output Stream (Fix: Pass raw array, not .buffer)
                 updateStatus("Conversion complete!");
                 const videoData = await ffmpegCore.readFile('output.mp4');
-                const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
+                const videoBlob = new Blob([videoData], { type: 'video/mp4' });
                 const videoUrl = URL.createObjectURL(videoBlob);
                 
                 if (downloadLink && downloadContainer) {
@@ -172,13 +172,9 @@ async function convertPdfToVideo() {
                 
                 // 7. Housekeeping: Wipe virtual memory allocation streams
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    try {
-                        await ffmpegCore.deleteFile(`frame_${padZero(pageNum)}.jpg`);
-                    } catch (e) {}
+                    await ffmpegCore.deleteFile(`frame_${padZero(pageNum)}.jpg`).catch(()=>{});
                 }
-                try {
-                    await ffmpegCore.deleteFile('output.mp4');
-                } catch (e) {}
+                await ffmpegCore.deleteFile('output.mp4').catch(()=>{});
 
             } catch (innerError) {
                 console.error(innerError);
