@@ -200,3 +200,8 @@ async function convertPdfToVideo() {
 if (convertBtn) {
     convertBtn.addEventListener('click', convertPdfToVideo);
 }
+
+// Auto-start conversion the moment a file is selected or dropped in
+if (fileInput) {
+    fileInput.addEventListener('change', convertPdfToVideo);
+}
