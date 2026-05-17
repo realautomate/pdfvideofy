@@ -44,7 +44,6 @@ async function initFFmpeg() {
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
     
-    // Tap into FFmpeg's internal brain to track video rendering progress
     ffmpeg.on('progress', ({ progress }) => {
         if (progress >= 0 && progress <= 1) {
             const totalProgress = 50 + (progress * 50);
@@ -91,6 +90,8 @@ async function convertPdfToVideo() {
                     updateStatus(`Slicing and stamping page ${pageNum} of ${pdf.numPages}...`);
                     
                     const page = await pdf.getPage(pageNum);
+                    
+                    // Keep reading at 2.0 scale to keep text sharp before downscaling
                     const viewport = page.getViewport({ scale: 2.0 });
                     
                     const tempCanvas = document.createElement('canvas');
@@ -101,10 +102,12 @@ async function convertPdfToVideo() {
                     await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
                     
                     if (pageNum === 1) {
-                        masterWidth = tempCanvas.width;
-                        masterHeight = tempCanvas.height;
-                        if (masterWidth % 2 !== 0) masterWidth--;
-                        if (masterHeight % 2 !== 0) masterHeight--;
+                        // ---------------------------------------------------------
+                        // ⚡ SPEED OPTIMIZATION: Force strict 720p HD bounds
+                        // ---------------------------------------------------------
+                        const isLandscape = tempCanvas.width >= tempCanvas.height;
+                        masterWidth = isLandscape ? 1280 : 720;
+                        masterHeight = isLandscape ? 720 : 1280;
                     }
                     
                     mainCanvas.width = masterWidth;
@@ -112,27 +115,26 @@ async function convertPdfToVideo() {
                     ctx.fillStyle = '#0f172a'; 
                     ctx.fillRect(0, 0, masterWidth, masterHeight);
                     
+                    // This automatically scales the massive PDF page down to perfectly fit the 720p HD box
                     const scale = Math.min(masterWidth / tempCanvas.width, masterHeight / tempCanvas.height);
                     const xOffset = (masterWidth - tempCanvas.width * scale) / 2;
                     const yOffset = (masterHeight - tempCanvas.height * scale) / 2;
                     ctx.drawImage(tempCanvas, xOffset, yOffset, tempCanvas.width * scale, tempCanvas.height * scale);
                     
                     // ---------------------------------------------------------
-                    // 3. Stamp Minimal Badge Watermark (Compact Version)
+                    // 3. Stamp Minimal Badge Watermark (Adjusted for 720p)
                     // ---------------------------------------------------------
-                    const pageText = `${pageNum} of ${pdf.numPages}`; // Removed "Page"
+                    const pageText = `${pageNum} of ${pdf.numPages}`;
                     
-                    // Base size exactly halved (0.0125 instead of 0.025)
-                    const fontSize = Math.max(10, Math.round(masterHeight * 0.0125)); 
+                    // Scaled up slightly so it doesn't get lost in the smaller 720p resolution
+                    const fontSize = Math.max(14, Math.round(masterHeight * 0.02)); 
                     ctx.font = `bold ${fontSize}px sans-serif`;
                     
                     const textWidth = ctx.measureText(pageText).width;
                     
-                    // Offsets halved so it sits tighter in the corner
                     const paddingX = masterWidth * 0.02; 
                     const paddingY = masterHeight * 0.015; 
                     
-                    // Inner badge padding scales naturally with the smaller font size
                     const badgePaddingX = fontSize * 0.8; 
                     const badgePaddingY = fontSize * 0.5; 
                     
@@ -141,7 +143,6 @@ async function convertPdfToVideo() {
                     const badgeX = masterWidth - paddingX - badgeWidth;
                     const badgeY = masterHeight - paddingY - badgeHeight;
 
-                    // Draw semi-transparent black pill shape
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; 
                     if (ctx.roundRect) {
                         ctx.beginPath();
@@ -151,7 +152,6 @@ async function convertPdfToVideo() {
                         ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight); 
                     }
 
-                    // Draw bright white text exactly in the center of the badge
                     ctx.fillStyle = '#ffffff'; 
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -170,12 +170,13 @@ async function convertPdfToVideo() {
                     updateProgress(pdfProgress);
                 }
                 
-                updateStatus("Stitching MP4 stream... This might take a moment.");
+                updateStatus("Stitching 720p MP4 stream...");
                 
                 await ffmpegCore.exec([
                     '-framerate', '1',
                     '-i', 'frame_%03d.jpg',
                     '-c:v', 'libx264',
+                    '-preset', 'fast', // Extra speed boost instruction for FFmpeg
                     '-r', '30',
                     '-pix_fmt', 'yuv420p',
                     'output.mp4'
