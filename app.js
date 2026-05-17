@@ -7,6 +7,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
 const fileInput = document.getElementById('file-input');
 const statusDiv = document.getElementById('status');
 const downloadLink = document.getElementById('download-link');
+const progressText = document.getElementById('progress-text'); // New Percentage Tracker
 
 // UI State Containers
 const uiDropzone = document.getElementById('ui-dropzone');
@@ -23,7 +24,7 @@ function switchUI(state) {
 
     if (state === 'processing') uiProcessing?.classList.remove('hidden');
     else if (state === 'success') uiSuccess?.classList.remove('hidden');
-    else uiDropzone?.classList.remove('hidden'); // Default to upload
+    else uiDropzone?.classList.remove('hidden');
 }
 
 function updateStatus(message, isError = false) {
@@ -32,10 +33,25 @@ function updateStatus(message, isError = false) {
     statusDiv.className = isError ? "font-medium text-red-400 mb-1" : "font-medium text-slate-300 mb-1";
 }
 
+function updateProgress(percent) {
+    if (progressText) {
+        progressText.textContent = `${Math.round(percent)}%`;
+    }
+}
+
 async function initFFmpeg() {
     if (ffmpeg) return ffmpeg;
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
+    
+    // Tap into FFmpeg's internal brain to track video rendering progress (Maps from 50% to 100%)
+    ffmpeg.on('progress', ({ progress }) => {
+        if (progress >= 0 && progress <= 1) {
+            const totalProgress = 50 + (progress * 50);
+            updateProgress(Math.min(totalProgress, 99)); // Cap at 99% until fully complete
+        }
+    });
+
     await ffmpeg.load({
         coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
         wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
@@ -54,8 +70,8 @@ async function convertPdfToVideo() {
     if (!file) return;
 
     try {
-        // Hide dropzone, show animated spinner!
         switchUI('processing');
+        updateProgress(0); // Reset tracker
         
         const ffmpegCore = await initFFmpeg();
         updateStatus("Reading PDF document streams...");
@@ -71,8 +87,10 @@ async function convertPdfToVideo() {
                 const mainCanvas = document.createElement('canvas');
                 const ctx = mainCanvas.getContext('2d');
                 
+                // Process pages and track progress from 0% to 50%
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
                     updateStatus(`Slicing and stamping page ${pageNum} of ${pdf.numPages}...`);
+                    
                     const page = await pdf.getPage(pageNum);
                     const viewport = page.getViewport({ scale: 2.0 });
                     
@@ -116,6 +134,10 @@ async function convertPdfToVideo() {
                     for (let i = 0; i < binaryData.length; i++) imgBuffer[i] = binaryData.charCodeAt(i);
                     
                     await ffmpegCore.writeFile(`frame_${padZero(pageNum)}.jpg`, imgBuffer);
+                    
+                    // Update PDF Parsing Progress (0 to 50%)
+                    const pdfProgress = (pageNum / pdf.numPages) * 50;
+                    updateProgress(pdfProgress);
                 }
                 
                 updateStatus("Stitching MP4 stream... This might take a moment.");
@@ -137,10 +159,9 @@ async function convertPdfToVideo() {
                     downloadLink.download = `${file.name.replace(/\.[^/.]+$/, "")}.mp4`;
                 }
                 
-                // Hide spinner, show Success button!
+                updateProgress(100);
                 switchUI('success');
                 
-                // Cleanup
                 for (let i = 1; i <= pdf.numPages; i++) {
                     try { await ffmpegCore.deleteFile(`frame_${padZero(i)}.jpg`); } catch(e){}
                 }
@@ -156,7 +177,7 @@ async function convertPdfToVideo() {
     } catch (err) {
         console.error(err);
         updateStatus(`Failed to start: ${err.message}`, true);
-        switchUI('upload'); // Show upload box again on error
+        switchUI('upload');
     }
 }
 
