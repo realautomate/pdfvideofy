@@ -196,12 +196,31 @@ async function convertPdfToVideo() {
     }
 }
 
-// Attach Application Trigger Events
+// ----------------------------------------------------
+// Attach Application Trigger Events (Bulletproof Version)
+// ----------------------------------------------------
+
+// 1. Button Click Trigger
 if (convertBtn) {
     convertBtn.addEventListener('click', convertPdfToVideo);
 }
 
-// Auto-start conversion the moment a file is selected or dropped in
+// 2. Click & Select Trigger (with Same-File fix)
 if (fileInput) {
+    // Clear the input value on click so it always fires, even if you pick the same test file
+    fileInput.addEventListener('click', (e) => { e.target.value = null; });
     fileInput.addEventListener('change', convertPdfToVideo);
 }
+
+// 3. Global Drag & Drop Trigger!
+window.addEventListener('dragover', (e) => {
+    e.preventDefault(); // Stops the browser from navigating away to open the PDF
+});
+
+window.addEventListener('drop', (e) => {
+    e.preventDefault(); // Stops the browser from navigating away
+    if (e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files; // Inject the dropped file into the input memory
+        convertPdfToVideo(); // Start the engine instantly
+    }
+});
