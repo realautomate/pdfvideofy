@@ -1,3 +1,7 @@
+console.log("========================================");
+console.log("🚀 PDFVIDEOFY DIAGNOSTIC ENGINE LOADED 🚀");
+console.log("========================================");
+
 // Ensure we use the correct namespace for FFmpeg v0.12+
 const { FFmpeg } = window.FFmpegWASM;
 let ffmpeg = null;
@@ -5,17 +9,19 @@ let ffmpeg = null;
 // Configure PDF.js Worker path using your local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
 
-// DOM Element Selectors (Ensure these match your index.html element IDs)
+// DOM Element Selectors
 const fileInput = document.getElementById('file-input') || document.querySelector('input[type="file"]');
 const convertBtn = document.getElementById('convert-btn') || document.querySelector('button');
 const statusDiv = document.getElementById('status');
 const downloadContainer = document.getElementById('download-container');
 const downloadLink = document.getElementById('download-link');
 
-/**
- * Update UI Status Messages
- */
+console.log("🔍 System Check:");
+console.log("- File Input Found:", !!fileInput);
+console.log("- Button Found:", !!convertBtn);
+
 function updateStatus(message, isError = false) {
+    console.log("🔔 STATUS UPDATE:", message);
     if (!statusDiv) return;
     statusDiv.textContent = message;
     statusDiv.className = isError 
@@ -23,73 +29,66 @@ function updateStatus(message, isError = false) {
         : "text-slate-300 text-sm mt-2 text-center";
 }
 
-/**
- * Initialize FFmpeg WebAssembly Core Engine
- */
 async function initFFmpeg() {
+    console.log("⚙️ Booting WebAssembly Engine...");
     if (ffmpeg) return ffmpeg;
     
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
     
-    // Loads the official WebAssembly core assets directly from absolute URLs to bypass local module errors
     await ffmpeg.load({
         coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
         wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
     });
-    
+    console.log("✅ Engine Booted Successfully");
     return ffmpeg;
 }
 
-/**
- * Helper function to zero-pad image names for sequential FFmpeg ingestion
- * e.g., 1 -> "frame_001.jpg"
- */
 function padZero(num, size = 3) {
     let s = num + "";
     while (s.length < size) s = "0" + s;
     return s;
 }
 
-/**
- * Main Orchestration Loop: Converts PDF pages to frames and compiles MP4
- */
 async function convertPdfToVideo() {
+    console.log("▶️ Conversion Triggered!");
     const file = fileInput?.files[0];
     if (!file) {
+        console.log("❌ No file detected in input!");
         updateStatus("Please choose a valid PDF file first.", true);
         return;
     }
+    
+    console.log("📄 File selected:", file.name, `(${file.size} bytes)`);
 
     try {
         convertBtn.disabled = true;
         if (downloadContainer) downloadContainer.classList.add('hidden');
         
-        // 1. Initialize WebAssembly Assets
         const ffmpegCore = await initFFmpeg();
         
         updateStatus("Reading PDF document streams...");
         const fileReader = new FileReader();
         
         fileReader.onload = async function () {
+            console.log("📖 File loaded into memory, parsing PDF...");
             try {
                 const typedArray = new Uint8Array(this.result);
                 const pdf = await pdfjsLib.getDocument(typedArray).promise;
+                console.log(`📑 PDF Parsed! Found ${pdf.numPages} pages.`);
                 
                 let masterWidth = 0;
                 let masterHeight = 0;
                 
-                // Create an offline dynamic template canvas for rendering and capturing frame arrays
                 const mainCanvas = document.createElement('canvas');
                 const ctx = mainCanvas.getContext('2d');
                 
                 updateStatus("Slicing document frames and stamping markers...");
                 
-                // 2. Loop Through and Normalize Every PDF Page
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    console.log(`🖼️ Processing Page ${pageNum}...`);
                     const page = await pdf.getPage(pageNum);
                     
-                    // Render page at high definition scale
                     const viewport = page.getViewport({ scale: 2.0 });
                     const tempCanvas = document.createElement('canvas');
                     const tempCtx = tempCanvas.getContext('2d');
@@ -98,32 +97,26 @@ async function convertPdfToVideo() {
                     
                     await page.render({ canvasContext: tempCtx, viewport: viewport }).promise;
                     
-                    // Freeze master dimensions using Page 1 as strict configuration baseline
                     if (pageNum === 1) {
                         masterWidth = tempCanvas.width;
                         masterHeight = tempCanvas.height;
-                        
-                        // H.264 video codec constraints require even width/height pixels
                         if (masterWidth % 2 !== 0) masterWidth--;
                         if (masterHeight % 2 !== 0) masterHeight--;
+                        console.log(`📏 Master Dimensions Locked: ${masterWidth}x${masterHeight}`);
                     }
                     
-                    // Lock the output canvas frame to target constraints
                     mainCanvas.width = masterWidth;
                     mainCanvas.height = masterHeight;
                     
-                    // Paint slate theme background canvas clear space
                     ctx.fillStyle = '#0f172a'; 
                     ctx.fillRect(0, 0, masterWidth, masterHeight);
                     
-                    // Aspect ratio calculations for letterboxing/pillarboxing odd cover images
                     const scale = Math.min(masterWidth / tempCanvas.width, masterHeight / tempCanvas.height);
                     const xOffset = (masterWidth - tempCanvas.width * scale) / 2;
                     const yOffset = (masterHeight - tempCanvas.height * scale) / 2;
                     
                     ctx.drawImage(tempCanvas, xOffset, yOffset, tempCanvas.width * scale, tempCanvas.height * scale);
                     
-                    // 3. Stamp Page Number Watermark (Bottom Right Corner)
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'; 
                     ctx.font = `bold ${Math.round(masterHeight * 0.025)}px sans-serif`; 
                     ctx.textAlign = 'right';
@@ -133,7 +126,6 @@ async function convertPdfToVideo() {
                     const paddingY = masterHeight * 0.03;
                     ctx.fillText(`Page ${pageNum} of ${pdf.numPages}`, masterWidth - paddingX, masterHeight - paddingY);
                     
-                    // 4. Compress to binary array data buffer and store into virtual memory file structure
                     const dataUrl = mainCanvas.toDataURL('image/jpeg', 0.85);
                     const base64Data = dataUrl.split(',')[1];
                     const binaryData = atob(base64Data);
@@ -147,20 +139,21 @@ async function convertPdfToVideo() {
                     await ffmpegCore.writeFile(filename, imgBuffer);
                 }
                 
-                // 5. Invoke Multi-Threaded FFmpeg Command to Process Slideshow Output
                 updateStatus("Stitching MP4 stream elements... This might take a moment.");
+                console.log("🎬 Starting FFmpeg compilation...");
                 
                 await ffmpegCore.exec([
-                    '-framerate', '1',               // Displays each slide frame for exactly 1 second
-                    '-i', 'frame_%03d.jpg',          // Ingests sequentially padded image buffers
-                    '-c:v', 'libx264',               // Compiles using clean, high-compatibility H.264 profile
-                    '-r', '30',                      // Inflates output rate container to stable 30fps standard
-                    '-pix_fmt', 'yuv420p',           // Enforces global color space readability criteria
-                    'output.mp4'                     // Output target naming structure
+                    '-framerate', '1',
+                    '-i', 'frame_%03d.jpg',
+                    '-c:v', 'libx264',
+                    '-r', '30',
+                    '-pix_fmt', 'yuv420p',
+                    'output.mp4'
                 ]);
                 
-                // 6. Read Output Stream from Virtual File System and Deploy Local Asset Url
+                console.log("✅ FFmpeg compilation finished!");
                 updateStatus("Conversion complete!");
+                
                 const videoData = await ffmpegCore.readFile('output.mp4');
                 const videoBlob = new Blob([videoData.buffer], { type: 'video/mp4' });
                 const videoUrl = URL.createObjectURL(videoBlob);
@@ -169,20 +162,16 @@ async function convertPdfToVideo() {
                     downloadLink.href = videoUrl;
                     downloadLink.download = `${file.name.replace(/\.[^/.]+$/, "")}.mp4`;
                     downloadContainer.classList.remove('hidden');
+                    console.log("🎉 Video ready for download!");
                 }
                 
-                // 7. Housekeeping: Wipe virtual memory allocation streams
                 for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    try {
-                        await ffmpegCore.deleteFile(`frame_${padZero(pageNum)}.jpg`);
-                    } catch (e) {}
+                    try { await ffmpegCore.deleteFile(`frame_${padZero(pageNum)}.jpg`); } catch (e) {}
                 }
-                try {
-                    await ffmpegCore.deleteFile('output.mp4');
-                } catch (e) {}
+                try { await ffmpegCore.deleteFile('output.mp4'); } catch (e) {}
 
             } catch (innerError) {
-                console.error(innerError);
+                console.error("❌ CRITICAL ERROR DURING PROCESSING:", innerError);
                 updateStatus(`Processing Error: ${innerError.message}`, true);
             } finally {
                 convertBtn.disabled = false;
@@ -192,37 +181,38 @@ async function convertPdfToVideo() {
         fileReader.readAsArrayBuffer(file);
         
     } catch (err) {
-        console.error(err);
+        console.error("❌ ENGINE INITIALIZATION ERROR:", err);
         updateStatus(`Engine Initialization Failure: ${err.message}`, true);
         convertBtn.disabled = false;
     }
 }
 
-// ----------------------------------------------------
-// Attach Application Trigger Events (Bulletproof Version)
-// ----------------------------------------------------
-
-// 1. Button Click Trigger
+// Event Listeners
 if (convertBtn) {
-    convertBtn.addEventListener('click', convertPdfToVideo);
+    convertBtn.addEventListener('click', () => {
+        console.log("🖱️ Button Clicked!");
+        convertPdfToVideo();
+    });
 }
 
-// 2. Click & Select Trigger (with Same-File fix)
 if (fileInput) {
-    // Clear the input value on click so it always fires, even if you pick the same test file
     fileInput.addEventListener('click', (e) => { e.target.value = null; });
-    fileInput.addEventListener('change', convertPdfToVideo);
+    fileInput.addEventListener('change', () => {
+        console.log("📂 File Browser Selected File!");
+        convertPdfToVideo();
+    });
 }
 
-// 3. Global Drag & Drop Trigger!
 window.addEventListener('dragover', (e) => {
-    e.preventDefault(); // Stops the browser from navigating away to open the PDF
+    e.preventDefault();
 });
 
 window.addEventListener('drop', (e) => {
-    e.preventDefault(); // Stops the browser from navigating away
+    e.preventDefault();
+    console.log("📥 Drop Event Detected!");
     if (e.dataTransfer.files.length > 0) {
-        fileInput.files = e.dataTransfer.files; // Inject the dropped file into the input memory
-        convertPdfToVideo(); // Start the engine instantly
+        fileInput.files = e.dataTransfer.files;
+        console.log("📂 File attached from drop:", e.dataTransfer.files[0].name);
+        convertPdfToVideo();
     }
 });
