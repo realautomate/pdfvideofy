@@ -118,20 +118,23 @@ async function convertPdfToVideo() {
                     ctx.drawImage(tempCanvas, xOffset, yOffset, tempCanvas.width * scale, tempCanvas.height * scale);
                     
                     // ---------------------------------------------------------
-                    // 3. Stamp High-Visibility Badge Watermark
+                    // 3. Stamp Minimal Badge Watermark (Compact Version)
                     // ---------------------------------------------------------
-                    const pageText = `Page ${pageNum} of ${pdf.numPages}`;
-                    const fontSize = Math.max(16, Math.round(masterHeight * 0.025)); // Scale font dynamically
+                    const pageText = `${pageNum} of ${pdf.numPages}`; // Removed "Page"
+                    
+                    // Base size exactly halved (0.0125 instead of 0.025)
+                    const fontSize = Math.max(10, Math.round(masterHeight * 0.0125)); 
                     ctx.font = `bold ${fontSize}px sans-serif`;
                     
-                    // Measure text to dynamically size the black box
                     const textWidth = ctx.measureText(pageText).width;
                     
-                    // Spacing calculations
-                    const paddingX = masterWidth * 0.04; // Distance from right edge
-                    const paddingY = masterHeight * 0.03; // Distance from bottom edge
-                    const badgePaddingX = fontSize * 0.8; // Inner box width padding
-                    const badgePaddingY = fontSize * 0.5; // Inner box height padding
+                    // Offsets halved so it sits tighter in the corner
+                    const paddingX = masterWidth * 0.02; 
+                    const paddingY = masterHeight * 0.015; 
+                    
+                    // Inner badge padding scales naturally with the smaller font size
+                    const badgePaddingX = fontSize * 0.8; 
+                    const badgePaddingY = fontSize * 0.5; 
                     
                     const badgeWidth = textWidth + (badgePaddingX * 2);
                     const badgeHeight = fontSize + (badgePaddingY * 2);
@@ -139,20 +142,20 @@ async function convertPdfToVideo() {
                     const badgeY = masterHeight - paddingY - badgeHeight;
 
                     // Draw semi-transparent black pill shape
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; // 75% dark black
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; 
                     if (ctx.roundRect) {
                         ctx.beginPath();
                         ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2);
                         ctx.fill();
                     } else {
-                        ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight); // Fallback
+                        ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight); 
                     }
 
                     // Draw bright white text exactly in the center of the badge
                     ctx.fillStyle = '#ffffff'; 
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(pageText, badgeX + (badgeWidth / 2), badgeY + (badgeHeight / 2) + 1);
+                    ctx.fillText(pageText, badgeX + (badgeWidth / 2), badgeY + (badgeHeight / 2) + 0.5);
                     // ---------------------------------------------------------
                     
                     const dataUrl = mainCanvas.toDataURL('image/jpeg', 0.85);
