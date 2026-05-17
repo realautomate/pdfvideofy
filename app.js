@@ -2,8 +2,9 @@
 const { FFmpeg } = window.FFmpegWASM;
 let ffmpeg = null;
 
-// Configure PDF.js Worker path using a reliable public CDN worker
+// Configure PDF.js Worker path using your local file
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.js';
+
 // DOM Element Selectors (Ensure these match your index.html element IDs)
 const fileInput = document.getElementById('file-input') || document.querySelector('input[type="file"]');
 const convertBtn = document.getElementById('convert-btn') || document.querySelector('button');
@@ -31,9 +32,10 @@ async function initFFmpeg() {
     updateStatus("Initializing high-speed video engine...");
     ffmpeg = new FFmpeg();
     
-    // Loads local asset bundle compiled to bypass strict cross-origin security rules
+    // Loads the official WebAssembly core assets directly from absolute URLs to bypass local module errors
     await ffmpeg.load({
-        coreURL: 'ffmpeg.js'
+        coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+        wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'
     });
     
     return ffmpeg;
