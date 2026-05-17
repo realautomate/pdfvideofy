@@ -6,9 +6,7 @@
     <title>pdfvideofy.com - Convert PDF to MP4</title>
     
     <script src="tailwind.js"></script>
-    
     <script src="pdf.min.js"></script>
-    
     <script src="ffmpeg.js"></script>
     <script src="ffmpeg-util.js"></script>
 </head>
@@ -26,28 +24,30 @@
         </div>
 
         <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-            <div id="dropzone" class="border-2 border-dashed border-slate-600 hover:border-indigo-500 rounded-xl p-10 text-center cursor-pointer transition duration-200 bg-slate-800/50">
-                <input type="file" id="fileInput" accept=".pdf" class="hidden">
+            
+            <div id="dropzone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-600 hover:border-indigo-500 rounded-xl p-10 text-center cursor-pointer transition duration-200 bg-slate-800/50 relative">
+                <input type="file" id="file-input" accept=".pdf" class="hidden">
                 <div class="text-5xl mb-4">📄</div>
                 <p class="font-semibold text-lg" id="uploadPrompt">Drag & drop your PDF here, or <span class="text-indigo-400">browse</span></p>
                 <p class="text-xs text-slate-500 mt-2">Supports standard .pdf documents</p>
             </div>
 
-            <div id="processState" class="hidden text-center py-6">
-                <div class="relative w-16 h-16 mx-auto mb-4">
-                    <div class="absolute inset-0 animate-spin rounded-full border-4 border-slate-700 border-t-indigo-500"></div>
-                    <div class="absolute inset-0 flex items-center justify-center font-bold text-sm text-indigo-400" id="progressText">0%</div>
+            <div id="status" class="text-slate-300 text-sm mt-5 text-center font-medium min-h-[1.5rem]"></div>
+
+            <div id="download-container" class="hidden mt-6">
+                <div class="text-center mb-4">
+                    <div class="text-4xl mb-2">🎉</div>
+                    <p class="font-bold text-lg text-emerald-400">Conversion Complete!</p>
                 </div>
-                <p class="font-medium text-slate-300">Slicing document and stitching MP4...</p>
-                <p class="text-xs text-slate-500 mt-1">This might take a moment.</p>
+                <a id="download-link" href="#" class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 font-bold px-8 py-3 rounded-xl shadow-lg shadow-indigo-500/30 transition duration-200 w-full text-white text-center">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download Your MP4 Video
+                </a>
+                <div class="text-center mt-4">
+                    <button onclick="window.location.reload()" class="text-sm text-slate-400 hover:text-white underline">Convert another file</button>
+                </div>
             </div>
 
-            <div id="successState" class="hidden text-center py-6">
-                <div class="text-5xl mb-3">🎉</div>
-                <p class="font-bold text-xl text-emerald-400 mb-4">Conversion Complete!</p>
-                <a id="downloadBtn" href="#" download class="inline-block bg-indigo-600 hover:bg-indigo-500 font-bold px-8 py-3 rounded-lg shadow transition duration-200 w-full mb-3 text-white text-center">Download Your MP4</a>
-                <button id="resetBtn" class="text-sm text-slate-400 hover:text-white underline mt-2">Convert another file</button>
-            </div>
         </div>
     </main>
 
@@ -55,6 +55,6 @@
         &copy; 2026 pdfvideofy.com. All rights reserved.
     </footer>
 
-    <script src="app.js?v=1"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>
